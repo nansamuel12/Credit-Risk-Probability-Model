@@ -1,104 +1,102 @@
 
-
 import pandas as pd
 import numpy as np
-from sklearn.model_selection import train_test_split
-from sklearn.ensemble import RandomForestClassifier, RandomForestRegressor
-from sklearn.metrics import classification_report, mean_squared_error, roc_auc_score
+from sklearn.model_selection import train_test_split, GridSearchCV
+from sklearn.ensemble import RandomForestClassifier
+from sklearn.metrics import classification_report, roc_auc_score, accuracy_score
+from sklearn.pipeline import Pipeline
+import mlflow
+import mlflow.sklearn
 import joblib
 import os
+import sys
 
+# Add src to path to import data_processing
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+from src.data_processing import build_training_pipeline
 
 def train_model(data_path):
+    # MLflow Setup
+    mlflow.set_experiment("Credit_Risk_Model")
+    
     print(f"Loading data from {data_path}...")
     df = pd.read_csv(data_path)
     
-    # 2. Select Features (Dynamic)
-    exclude_cols = ['CustomerId', 'Risk_Label']
-    features = [c for c in df.columns if c not in exclude_cols]
-    print(f"Training with {len(features)} features: {features}")
+    # Define Target and Features
+    target = 'Risk_Label'
+    if target not in df.columns:
+        raise ValueError(f"Target {target} not found in dataset. Run data processing first.")
+        
+    X = df.drop(columns=[target, 'CustomerId', 'Cluster', 'FraudResult_max']) # Drop ID and intermediate targets
+    y = df[target]
     
-    target_risk = 'Risk_Label'
-    if target_risk not in df.columns:
-         # Fallback if old file
-         target_risk = 'Risk_Label_Binary'
+    # Identify Column Types for Pipeline
+    # Categoricals for WoE/OHE
+    cat_cols = [c for c in X.columns if X[c].dtype == 'object' or c == 'ProductCategory']
+    # Numerics
+    num_cols = [c for c in X.columns if c not in cat_cols]
     
-    X = df[features]
-    y_risk = df[target_risk]
+    print(f"Categorical Features: {cat_cols}")
+    print(f"Numerical Features: {num_cols}")
     
     # Split
-    X_train, X_test, y_train, y_test = train_test_split(X, y_risk, test_size=0.2, random_state=42, stratify=y_risk)
+    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
     
-    # --- Task 3: Risk Probability Model ---
-    print("\nTraining Risk Model...")
-    risk_model = RandomForestClassifier(n_estimators=100, random_state=42, class_weight='balanced')
-    risk_model.fit(X_train, y_train)
+    # Build Preprocessor
+    preprocessor = build_training_pipeline(cat_cols, num_cols)
     
-    # Evaluate
-    y_pred = risk_model.predict(X_test)
-    y_prob = risk_model.predict_proba(X_test)[:, 1]
-    print("Risk Model Performance:")
-    print(classification_report(y_test, y_pred))
-    print(f"ROC AUC: {roc_auc_score(y_test, y_prob)}")
+    # Full Pipeline
+    rf = RandomForestClassifier(random_state=42, class_weight='balanced')
+    pipeline = Pipeline(steps=[
+        ('preprocessor', preprocessor),
+        ('classifier', rf)
+    ])
     
-    # Feature Importance (Task 2)
-    importances = pd.Series(risk_model.feature_importances_, index=features).sort_values(ascending=False)
-    print("\nFeature Importances (Risk Predictors):")
-    print(importances)
+    # Task 5: Hyperparameter Tuning
+    param_grid = {
+        'classifier__n_estimators': [50, 100],
+        'classifier__max_depth': [None, 10, 20],
+        'classifier__min_samples_split': [2, 5]
+    }
     
-    # --- Task 4: Credit Score Model ---
-    # We don't train a model *for* the score, we derive it from the Risk Probability.
-    # Score = (1 - RiskProb) * 850 (Standard Scale usually 300-850)
-    # Let's define a function for it in predict.py later.
+    print("Starting Grid Search...")
+    grid_search = GridSearchCV(pipeline, param_grid, cv=3, scoring='roc_auc', n_jobs=-1)
     
-    # --- Task 5: Optimal Amount Model (Regression) ---
-    # We want to predict 'Total_Value' (or similar capacity metric) for Good Customers.
-    # We'll assume 'Total_Value' correlates with what they can handle.
-    # Training only on Low Risk customers.
-    
-    print("\nTraining Amount Limit Model (on non-fraud/low-risk customers)...")
-    good_customers = df[df[target_risk] == 0]
-    X_good = good_customers[features].drop(columns=['Total_Value', 'Total_Amount']) # Don't leak target if target is related
-    # Actually, predicting "Total_Value" using "Total_Transactions" and "Average_Amount" is creating a circular dependency if not careful.
-    # The prompt asks for "Optimal amount".
-    # Let's predict 'Value_mean' (Average transaction value) as a proxy for "Loan Size" they are comfortable with?
-    # Or 'Total_Value'?
-
-    # Let's predict 'Value_mean' (Average transaction value) as a proxy
-    # We need to make sure we use the SCALED target if everything is scaled?
-    # Actually, the target `Value_mean` is also scaled in the CSV!
-    # If we predict scaled value, we must unscale it for the user.
-    # But `StandardScaler` scales ALL numericals including 'Value_mean'.
-    # This is a bit tricky for the "Optimal Amount" output in API.
-    # We will predict the scaled value, and the API output will be a "Score".
-    # Or we can inverse transform... but the Pipeline transforms everything together.
-    # For now, let's predict the scaled 'Value_mean'.
-    
-    target_amount = 'Value_mean'
-    
-    # Use features that are good predictors but not the target itself (Total_Value, Value_mean)
-    # Filter features list
-    features_amount = [f for f in features if 'Value' not in f and 'Total_Amount' not in f]
-    print(f"Features for Amount Model: {features_amount}")
-    
-    X_amt = good_customers[features_amount]
-    y_amt = good_customers[target_amount]
-    
-    X_train_a, X_test_a, y_train_a, y_test_a = train_test_split(X_amt, y_amt, test_size=0.2, random_state=42)
-    
-    amount_model = RandomForestRegressor(n_estimators=100, random_state=42)
-    amount_model.fit(X_train_a, y_train_a)
-    
-    y_pred_a = amount_model.predict(X_test_a)
-    mse = mean_squared_error(y_test_a, y_pred_a)
-    print(f"Amount Model MSE: {mse}")
-    
-    # Save Models
-    os.makedirs('models', exist_ok=True)
-    joblib.dump(risk_model, 'models/risk_model.pkl')
-    joblib.dump(amount_model, 'models/amount_model.pkl')
-    print("\nModels saved to models/")
-
+    with mlflow.start_run():
+        # Fit
+        grid_search.fit(X_train, y_train)
+        
+        best_model = grid_search.best_estimator_
+        best_params = grid_search.best_params_
+        best_score = grid_search.best_score_
+        
+        print(f"Best Params: {best_params}")
+        print(f"Best CV AUC: {best_score}")
+        
+        # Log Params
+        mlflow.log_params(best_params)
+        
+        # Evaluate on Test
+        y_pred = best_model.predict(X_test)
+        y_prob = best_model.predict_proba(X_test)[:, 1]
+        
+        auc = roc_auc_score(y_test, y_prob)
+        acc = accuracy_score(y_test, y_pred)
+        
+        print(f"Test AUC: {auc}")
+        print(classification_report(y_test, y_pred))
+        
+        # Log Metrics
+        mlflow.log_metric("test_auc", auc)
+        mlflow.log_metric("test_accuracy", acc)
+        
+        # Log Model (Task 6 preparation: Model Registry)
+        mlflow.sklearn.log_model(best_model, "model", registered_model_name="CreditRiskModel")
+        
+        # Save locally as fallback
+        os.makedirs('models', exist_ok=True)
+        joblib.dump(best_model, 'models/best_risk_model.pkl')
+        print("Model saved locally to models/best_risk_model.pkl")
 
 if __name__ == "__main__":
-    train_model("data/processed/customer_risk_data_pipeline.csv")
+    train_model("data/processed/customer_risk_data.csv")

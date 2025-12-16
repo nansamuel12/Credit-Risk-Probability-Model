@@ -11,3 +11,6 @@ pydantic
 pytest
 jupyter
 requests
+mlflow
+category_encoders
+flake8
