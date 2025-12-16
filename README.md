@@ -1,5 +1,4 @@
 
-
 # Credit Risk Probability Model
 
 This project aims to build a credit risk model to categorize users, predict risk probability, assign credit scores, and predict optimal loan amounts.
@@ -21,10 +20,28 @@ Defining "Default" in transaction data is challenging without explicit repayment
 ### Model Interpretability vs. Complexity
 - **Interpretable Models (Logistic Regression, Decision Trees)**: Preferred by regulators for transparency. Easier to explain *why* a customer was rejected.
 - **Complex Models (Random Forest, Gradient Boosting)**: Often yield higher accuracy but are "black boxes".
-- **Selected Approach**: We use **Random Forest** for its high performance on complex, non-linear transaction data, but we mitigate opacity by analyzing **Feature Importance** (e.g., heavily weighting `Total_Amount` and `Frequency`) to explain decisions.
+- **Selected Approach**: We use **Random Forest** for its high performance on complex, non-linear transaction data, but we mitigate opacity by analyzing **Feature Importance** (e.g., heavily weighting `Total_Amount` and `Frequency`) to explain decisions. We also benchmark against **Logistic Regression** for interpretability.
 
 ## Structure
 - `data/`: Raw and processed data
 - `notebooks/`: EDA and analysis
 - `src/`: Source code for processing, training, and API
 - `tests/`: Unit tests
+
+## Deployment & MLflow
+
+### Environment Variables
+The application calculates predictions using models that can be served from a local file or an MLflow Model Registry.
+
+- `MLFLOW_TRACKING_URI`: (Optional) The URI of your MLflow tracking server (e.g., `http://localhost:5000` or Databricks URI).
+- `MLFLOW_MODEL_NAME`: Name of the registered model to load (Default: `CreditRiskModel_RF`).
+- `MLFLOW_MODEL_STAGE`: Stage of the model to load (e.g., `Production`, `Staging`, `None`. Default: `Production`).
+
+### Local Setup
+1. **Install Dependencies**: `pip install -r requirements.txt`
+2. **Process Data**: `python src/data_processing.py`
+3. **Train Models**: `python src/train.py` (This saves to `models/` and logs to local MLflow `mlruns/`)
+4. **Predict**: `python src/predict.py`
+
+### CI/CD
+This repo uses GitHub Actions to run tests (`pytest`) and linting (`flake8`) on every push to `main`.
