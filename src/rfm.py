@@ -1,78 +1,69 @@
 import pandas as pd
 import numpy as np
+from sklearn.preprocessing import StandardScaler
+from sklearn.cluster import KMeans
 import os
-from datetime import datetime
 
-"""
-RFM Features Creation (Simple Explanation)
-------------------------------------------
-RFM = Recency, Frequency, Monetary
-
-This script transforms transaction-level data (many rows per customer) 
-into customer-level data (one row per customer) with summary features.
-
-1. Recency: How recently did the customer make a transaction? (today - last transaction date)
-2. Frequency: How many transactions did they make? (total count)
-3. Monetary: How much do they spend? (total sum of amount)
-"""
-
-def create_rfm_features(input_path='data/data.csv', output_path='data/rfm_features.csv'):
-    # 1. Load the data
-    print(f"--- Step 1: Loading data from {input_path} ---")
-    if not os.path.exists(input_path):
-        print(f"Error: File {input_path} not found.")
-        return
-    
-    df = pd.read_csv(input_path)
-    
-    # 2. Convert TransactionStartTime to datetime
-    print("--- Step 2: Processing dates ---")
+def calculate_rfm(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Calculate Recency, Frequency, and Monetary features.
+    Output: One row per customer.
+    """
+    df = df.copy()
     df['TransactionStartTime'] = pd.to_datetime(df['TransactionStartTime'])
     
-    # 3. Define 'Today' for Recency calculation
-    # We use the most recent transaction date in the dataset as our reference point
-    reference_date = df['TransactionStartTime'].max()
-    print(f"Reference Date (Latest Transaction): {reference_date}")
+    # Reference date (Latest transaction in dataset)
+    ref_date = df['TransactionStartTime'].max()
     
-    # 4. Calculate RFM Features
-    print("--- Step 3: Calculating RFM Features ---")
-    
-    # Group by CustomerId and aggregate
     rfm = df.groupby('CustomerId').agg({
         # Recency: Days since last transaction
-        'TransactionStartTime': lambda x: (reference_date - x.max()).days,
-        
-        # Frequency: Total number of transactions
+        'TransactionStartTime': lambda x: (ref_date - x.max()).days,
+        # Frequency: Count of transactions
         'TransactionId': 'count',
-        
         # Monetary: Total amount spent
         'Amount': 'sum'
     }).reset_index()
     
-    # 5. Rename columns for clarity
     rfm.columns = ['CustomerId', 'Recency', 'Frequency', 'Monetary']
+    return rfm
+
+def create_proxy_target(df_rfm: pd.DataFrame, random_state: int = 42) -> pd.DataFrame:
+    """
+    Use KMeans clustering on RFM to create a proxy 'Risk_Label'.
+    Risk_Label = 1 for the cluster with the highest average Recency (Inactive customers).
+    """
+    df_rfm = df_rfm.copy()
     
-    # 6. Show the transformation results
-    print("\n--- TRANSFORMATION SUMMARY ---")
-    print(f"Before: {len(df)} transaction rows")
-    print(f"After: {len(rfm)} customer rows (One row per customer)")
+    # Select RFM for clustering
+    features = ['Recency', 'Frequency', 'Monetary']
+    X = df_rfm[features]
     
-    print("\n--- SAMPLE DATA (BEFORE) ---")
-    print(df[['CustomerId', 'TransactionStartTime', 'Amount']].head())
+    # Scaling is crucial for KMeans
+    scaler = StandardScaler()
+    X_scaled = scaler.fit_transform(X)
     
-    print("\n--- SAMPLE DATA (AFTER - RFM) ---")
-    print(rfm.head())
+    # Clustering
+    kmeans = KMeans(n_clusters=3, random_state=random_state, n_init=10)
+    df_rfm['Cluster'] = kmeans.fit_predict(X_scaled)
     
-    # 7. Quality Check: Check for risky patterns
-    print("\n--- QUICK RISK INSIGHTS ---")
-    print("High Recency (e.g., > 30 days) -> Potential risk (Inactive)")
-    print("Low Frequency (e.g., 1 transaction) -> Potential risk (New/Unstable)")
-    print("Low Monetary -> Potential risk (Low engagement)")
+    # Determine the "High Risk" cluster (Highest Recency = Longest inactivity)
+    avg_recency = df_rfm.groupby('Cluster')['Recency'].mean()
+    high_risk_cluster = avg_recency.idxmax()
     
-    # 8. Save results
-    os.makedirs(os.path.dirname(output_path), exist_ok=True)
-    rfm.to_csv(output_path, index=False)
-    print(f"\nSuccessfully saved RFM features to {output_path}")
+    # Assign Risk_Label
+    df_rfm['Risk_Label'] = (df_rfm['Cluster'] == high_risk_cluster).astype(int)
+    
+    print(f"Proxy Target Created. Risk Cluster ID: {high_risk_cluster}")
+    print(df_rfm.groupby('Risk_Label')[features].mean())
+    
+    return df_rfm
 
 if __name__ == "__main__":
-    create_rfm_features()
+    # Test on raw data
+    from src.data_processing import load_data
+    from src.config import config
+    
+    raw_df = load_data(str(config.paths.raw_data))
+    rfm_df = calculate_rfm(raw_df)
+    labeled_df = create_proxy_target(rfm_df)
+    print(labeled_df.head())
