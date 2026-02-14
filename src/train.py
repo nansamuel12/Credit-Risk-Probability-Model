@@ -4,19 +4,23 @@ import numpy as np
 from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.linear_model import LogisticRegression
-from sklearn.metrics import classification_report, roc_auc_score, accuracy_score, precision_score, recall_score, f1_score
+from sklearn.metrics import roc_auc_score, accuracy_score, precision_score, recall_score, f1_score
 from sklearn.pipeline import Pipeline
+from sklearn.base import BaseEstimator
 import mlflow
 import mlflow.sklearn
 import joblib
 import os
 import sys
+from typing import Optional, Union, Any
+from pathlib import Path
 
-# Add src to path to import data_processing
+# Add src to path
 sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
 from src.data_processing import build_training_pipeline
+from src.config import config
 
-def evaluate_and_log(model, X_test, y_test, model_name):
+def evaluate_and_log(model: BaseEstimator, X_test: pd.DataFrame, y_test: pd.Series, model_name: str) -> float:
     print(f"\nEvaluating {model_name}...")
     y_pred = model.predict(X_test)
     y_prob = model.predict_proba(X_test)[:, 1]
@@ -31,7 +35,7 @@ def evaluate_and_log(model, X_test, y_test, model_name):
     print(f"Test AUC: {auc:.4f}")
     print(f"Accuracy: {acc:.4f}, Precision: {prec:.4f}, Recall: {rec:.4f}, F1: {f1:.4f}")
     
-    # Log to MLflow (assuming active run)
+    # Log to MLflow
     mlflow.log_metric(f"{model_name}_test_auc", auc)
     mlflow.log_metric(f"{model_name}_test_accuracy", acc)
     mlflow.log_metric(f"{model_name}_test_precision", prec)
@@ -40,42 +44,59 @@ def evaluate_and_log(model, X_test, y_test, model_name):
     
     return auc
 
-def train_model(data_path):
+def train_model(data_path: Union[str, Path]) -> None:
     # MLflow Setup
     mlflow.set_experiment("Credit_Risk_Model")
     
     print(f"Loading data from {data_path}...")
     df = pd.read_csv(data_path)
     
-    # Define Target and Features
-    target = 'Risk_Label'
+    # Define Target and Features based on Config
+    target = config.cols.target
     if target not in df.columns:
-        raise ValueError(f"Target {target} not found in dataset. Run data processing first.")
+        raise ValueError(f"Target {target} not found. Run data processing first.")
         
-    X = df.drop(columns=[target, 'CustomerId', 'Cluster', 'FraudResult_max']) # Drop ID and intermediate targets
+    drop_cols = [target, config.cols.id_col, 'Cluster', 'FraudResult_max']
+    # Filter only columns present in df
+    drop_cols = [c for c in drop_cols if c in df.columns]
+    
+    X = df.drop(columns=drop_cols)
     y = df[target]
     
-    # Identify Column Types for Pipeline
+    # Identify Column Types by checking config and dataframe
+    # We can infer from data types as before, but stick to generic logic
     cat_cols = [c for c in X.columns if X[c].dtype == 'object' or c == 'ProductCategory']
     num_cols = [c for c in X.columns if c not in cat_cols]
     
     # Split
-    X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42, stratify=y)
+    X_train, X_test, y_train, y_test = train_test_split(
+        X, y, 
+        test_size=config.model.test_size, 
+        random_state=config.model.random_state, 
+        stratify=y
+    )
     
     # Build Preprocessor
     preprocessor = build_training_pipeline(cat_cols, num_cols)
     
+    # Ensure models dir exists
+    os.makedirs(config.paths.models_dir, exist_ok=True)
+    
     # --- Experiment 1: Random Forest (Grid Search) ---
     with mlflow.start_run(run_name="RandomForest_GridSearch"):
-        rf = RandomForestClassifier(random_state=42, class_weight='balanced')
+        rf = RandomForestClassifier(
+            random_state=config.model.random_state, 
+            class_weight='balanced'
+        )
         pipeline_rf = Pipeline(steps=[
             ('preprocessor', preprocessor),
             ('classifier', rf)
         ])
         
+        # Use config for some default params, but allow GridSearch to explore
         param_grid = {
-            'classifier__n_estimators': [50, 100],
-            'classifier__max_depth': [None, 10],
+            'classifier__n_estimators': [50, config.model.rf_n_estimators],
+            'classifier__max_depth': [None, config.model.rf_max_depth],
             'classifier__min_samples_split': [2, 5]
         }
         
@@ -93,12 +114,15 @@ def train_model(data_path):
         mlflow.sklearn.log_model(best_rf, "model_rf", registered_model_name="CreditRiskModel_RF")
         
         # Save locally
-        os.makedirs('models', exist_ok=True)
-        joblib.dump(best_rf, 'models/best_risk_model.pkl')
+        joblib.dump(best_rf, str(config.paths.risk_model).replace("risk_model", "best_risk_model"))
         
     # --- Experiment 2: Logistic Regression ---
     with mlflow.start_run(run_name="LogisticRegression_Baseline"):
-        lr = LogisticRegression(random_state=42, class_weight='balanced', max_iter=1000)
+        lr = LogisticRegression(
+            random_state=config.model.random_state, 
+            class_weight='balanced', 
+            max_iter=1000
+        )
         pipeline_lr = Pipeline(steps=[
             ('preprocessor', preprocessor),
             ('classifier', lr)
@@ -111,9 +135,10 @@ def train_model(data_path):
         
         # Log Model
         mlflow.sklearn.log_model(pipeline_lr, "model_lr")
+        # Save locally with custom name for now, or update config to match
         joblib.dump(pipeline_lr, 'models/logistic_model.pkl')
 
     print("\nTraining Complete. Models saved.")
 
 if __name__ == "__main__":
-    train_model("data/processed/customer_risk_data.csv")
+    train_model(config.paths.processed_data)

@@ -1,5 +1,6 @@
-
 # Credit Risk Probability Model
+
+[![Credit Risk Model CI](https://github.com/nansamuel12/Credit-Risk-Probability-Model/actions/workflows/ci.yml/badge.svg)](https://github.com/nansamuel12/Credit-Risk-Probability-Model/actions/workflows/ci.yml)
 
 This project aims to build a credit risk model to categorize users, predict risk probability, assign credit scores, and predict optimal loan amounts.
 
@@ -21,6 +22,18 @@ Defining "Default" in transaction data is challenging without explicit repayment
 - **Interpretable Models (Logistic Regression, Decision Trees)**: Preferred by regulators for transparency. Easier to explain *why* a customer was rejected.
 - **Complex Models (Random Forest, Gradient Boosting)**: Often yield higher accuracy but are "black boxes".
 - **Selected Approach**: We use **Random Forest** for its high performance on complex, non-linear transaction data, but we mitigate opacity by analyzing **Feature Importance** (e.g., heavily weighting `Total_Amount` and `Frequency`) to explain decisions. We also benchmark against **Logistic Regression** for interpretability.
+
+### RFM Feature Engineering
+We use **RFM (Recency, Frequency, Monetary)** features to summarize customer behavior. This transforms transaction-level data (many rows per customer) into customer-level data (one row per customer):
+
+- **Recency**: Days since the last transaction. High recency indicates inactivity (potential risk).
+- **Frequency**: Total number of transactions. Low frequency indicates low engagement or new users.
+- **Monetary**: Total amount spent. Low spending indicates low customer value.
+
+Calculation for each customer:
+- `Recency = Today - Last Transaction Date`
+- `Frequency = Count(Transactions)`
+- `Monetary = Sum(Amount)`
 
 ## Structure
 - `data/`: Raw and processed data
