@@ -36,10 +36,24 @@ Calculation for each customer:
 - `Monetary = Sum(Amount)`
 
 ## Structure
-- `data/`: Raw and processed data
-- `notebooks/`: EDA and analysis
-- `src/`: Source code for processing, training, and API
-- `tests/`: Unit tests
+```
+credit-risk-model/
+│
+├── data/
+│
+├── notebooks/
+│   └── eda.ipynb
+│
+├── src/
+│   ├── data_processing.py
+│   ├── rfm.py
+│   ├── train.py
+│
+├── tests/
+│
+├── requirements.txt
+├── README.md
+```
 
 ## Deployment & MLflow
 
