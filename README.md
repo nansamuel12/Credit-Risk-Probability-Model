@@ -117,6 +117,26 @@ The pipeline automatically promotes the best-performing model to the **Productio
 
 ---
 
+## 📈 Model Visualizations
+
+### RFM Customer Clusters
+Visualization of the 3 distinct customer segments based on Recency, Frequency, and Monetary behavior.
+![RFM Clusters](reports/figures/rfm_clusters.png)
+
+### Proxy Risk Label Distribution
+Distribution of the generated "High Risk" (1) and "Low Risk" (0) labels used for training.
+![Risk Label Distribution](reports/figures/risk_label_distribution.png)
+
+### Model Performance (ROC Curve)
+Comparison of Logistic Regression and Random Forest models using Receiver Operating Characteristic curves.
+![ROC Curve](reports/figures/model_performance_roc.png)
+
+### Feature Importance
+The key drivers influencing the model's risk prediction (Random Forest).
+![Feature Importance](reports/figures/feature_importance.png)
+
+---
+
 ## ✅ Automation & Testing
 The project includes automated CI/CD via GitHub Actions and unit tests for core logic.
 
