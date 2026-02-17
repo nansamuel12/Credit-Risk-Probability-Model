@@ -12,7 +12,7 @@ def load_data(path: str) -> pd.DataFrame:
         raise FileNotFoundError(f"Data folder not found at {path}")
     return pd.read_csv(path)
 
-def aggregate_features(df: pd.DataFrame) -> pd.DataFrame:
+def aggregate_customer_features(df: pd.DataFrame) -> pd.DataFrame:
     """Aggregate transaction-level data to customer-level summary features."""
     # Ensure datetime
     df['TransactionStartTime'] = pd.to_datetime(df['TransactionStartTime'])
@@ -43,7 +43,7 @@ def aggregate_features(df: pd.DataFrame) -> pd.DataFrame:
     
     return df_agg
 
-def preprocess_pipeline(num_cols: list, cat_cols: list = None) -> ColumnTransformer:
+def preprocessing_pipeline(num_cols: list, cat_cols: list = None) -> ColumnTransformer:
     """Build a scikit-learn preprocessing pipeline."""
     
     # Numeric Transformer
@@ -69,6 +69,6 @@ if __name__ == "__main__":
     # Example usage/test
     from src.config import config
     data = load_data(str(config.paths.raw_data))
-    agg_data = aggregate_features(data)
+    agg_data = aggregate_customer_features(data)
     print(f"Aggregated Data Shape: {agg_data.shape}")
     print(agg_data.head())

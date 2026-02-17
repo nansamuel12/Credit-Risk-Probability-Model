@@ -4,3 +4,8 @@ data/
 __pycache__/
 .ipynb_checkpoints/
 .env
+mlruns/
+mlflow.db
+models/*.pkl
+.pytest_cache/
+*.log
