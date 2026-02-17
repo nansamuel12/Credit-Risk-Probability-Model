@@ -4,7 +4,12 @@ import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
 import os
+import sys
 import joblib
+
+# Add project root to path to allow direct execution
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
+
 from sklearn.metrics import roc_curve, auc
 from src.rfm import calculate_rfm, create_proxy_target
 from src.config import config

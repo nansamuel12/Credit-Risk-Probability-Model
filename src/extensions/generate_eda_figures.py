@@ -4,6 +4,10 @@ import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
 import os
+import sys
+
+# Add project root to path to allow direct execution
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 
 # Set plot style
 sns.set(style="whitegrid")
@@ -14,7 +18,8 @@ output_dir = 'reports/figures'
 os.makedirs(output_dir, exist_ok=True)
 
 print("Loading data...")
-df = pd.read_csv('data/raw/data.csv')
+# Fixed data path (from data/raw/data.csv to data/data.csv)
+df = pd.read_csv('data/data.csv')
 df['TransactionStartTime'] = pd.to_datetime(df['TransactionStartTime'])
 
 print("Generating Distribution of Transaction Amounts...")
