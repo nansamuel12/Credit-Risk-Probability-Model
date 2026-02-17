@@ -9,8 +9,8 @@ from streamlit_shap import st_shap
 import os
 import sys
 
-# Add src to path
-sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+# Add project root to path
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..')))
 from src.config import config
 
 # Streamlit Config

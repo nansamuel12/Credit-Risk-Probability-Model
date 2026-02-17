@@ -67,6 +67,8 @@ def preprocessing_pipeline(num_cols: list, cat_cols: list = None) -> ColumnTrans
 
 if __name__ == "__main__":
     # Example usage/test
+    import sys
+    sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
     from src.config import config
     data = load_data(str(config.paths.raw_data))
     agg_data = aggregate_customer_features(data)
